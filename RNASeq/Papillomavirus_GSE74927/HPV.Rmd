@@ -1,0 +1,917 @@
+---
+title: "RNA Seq HPV"
+author: "Nilesh Kumar"
+date: "3/29/2022"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## RNAseq Mouse
+
+```{r}
+setwd("/data/user/home/nileshkr/Desktop/DATA/nileshkr/2022/Prj29_Star_protocol/STAR/RNASeq/Papillomavirus_GSE74927")
+```
+
+## Export folder
+
+```{r}
+mainDir = getwd()
+subDir_img = "00_DEDeq2_Images_HPV"
+subDir_data = "00_DEDeq2_Data_HPV"
+dir.create(file.path(mainDir, subDir_img), showWarnings = FALSE)
+#setwd(file.path(mainDir, subDir_img))
+dir.create(file.path(mainDir, subDir_data), showWarnings = FALSE)
+
+
+```
+
+# Functions
+
+## Image export
+```{r}
+save_pheatmap_png <- function(x, filename, width=1600, height=1200, res = 300) {
+  png(filename, width = width, height = height, res = res)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+
+save_pheatmap_svg <- function(x, filename, width=1600, height=1200, res = 300) {
+  svg(filename, width = width, height = height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+}
+```
+
+
+## ID conversion function (Annotaion)
+```{r}
+convertIDs <- function( ids, from, to, db, ifMultiple=c("putNA", "useFirst")) {
+  stopifnot( inherits( db, "AnnotationDb" ) )
+  ifMultiple <- match.arg( ifMultiple )
+  suppressWarnings( selRes <- AnnotationDbi::select(
+    db, keys=ids, keytype=from, columns=c(from,to) ) )
+  if ( ifMultiple == "putNA" ) {
+    duplicatedIds <- selRes[ duplicated( selRes[,1] ), 1 ]
+    selRes <- selRes[ ! selRes[,1] %in% duplicatedIds, ]
+  }
+  return( selRes[ match( ids, selRes[,1] ), 2 ] )
+}
+```
+
+
+# Loading libraries
+
+
+```{r include=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+if (!requireNamespace("DESeq2", quietly = TRUE))
+  BiocManager::install("DESeq2")
+
+if (!requireNamespace("apeglm", quietly = TRUE))
+  BiocManager::install("apeglm")
+
+if (!requireNamespace("org.Hs.eg.db", quietly = TRUE))
+  BiocManager::install("org.Hs.eg.db")
+
+#if (!requireNamespace("ReportingTools", quietly = TRUE))
+#  BiocManager::install("ReportingTools")
+
+
+
+
+library("BiocParallel")
+register(MulticoreParam(4))
+
+
+library("DESeq2")
+#library("ReportingTools")
+
+library(png)
+
+
+```
+
+
+# Loading Data
+
+```{r Read_data}
+Read_count <- "GSE74927_all_sample_raw_count.txt"
+Meta <- 'DESeq_meta.csv'
+cts <- as.matrix(read.csv(Read_count,sep="\t",row.names="symbol"))
+coldata <- read.csv(Meta, row.names=1)
+#coldata <- coldata[,c("hpv_status")]
+coldata$hpv_status <- factor(coldata$hpv_status)
+#coldata$Tumor <- factor(coldata$Tumor)
+coldata
+#head(cts)
+```
+
+```{r meta_data}
+DT::datatable(coldata)
+```
+
+```{r Expression_table}
+DT::datatable(head(cts))
+```
+
+# Differential expression analysis
+
+```{r}
+
+dds <- DESeq2::DESeqDataSetFromMatrix(countData = cts,
+                              colData = coldata,
+                              design = ~ hpv_status)# + Condition)
+dds
+```
+
+
+
+```{r}
+featureData <- data.frame(gene=rownames(cts))
+mcols(dds) <- DataFrame(mcols(dds), featureData)
+mcols(dds)
+
+```
+
+
+# Pre-filtering
+
+```{r}
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+```
+
+
+# reference level
+
+```{r}
+dds$hpv_status <- relevel(dds$hpv_status, ref = "Neg")
+```
+
+# Tumor_CGRP_vs_NES
+```{r}
+dds <- DESeq2::DESeq(dds)
+res <- results(dds)
+#res <- results(dds, name="Tumor_CGRP_vs_NES")
+#res <- results(dds, contrast=c("hpv_status", "HPV", "Neg"))
+resultsNames(dds)
+```
+
+
+```{r}
+DT::datatable(head(as.data.frame(res)))
+```
+
+```{r}
+resultsNames(dds)
+```
+
+
+## Apeglm
+```{r}
+resLFC <- lfcShrink(dds, coef="hpv_status_HPV_vs_Neg", type="apeglm")
+DT::datatable(head(as.data.frame(resLFC)))
+```
+
+# Annotation
+
+```{r}
+
+library("AnnotationDbi")
+library(org.Hs.eg.db)
+#library(org.Mm.eg.db)
+#columns(org.Mm.eg.db)
+keytypes(org.Hs.eg.db)
+```
+
+```{r}
+SYMBOL_IDS <- row.names(res)
+SYMBOL_IDS = unlist(lapply(SYMBOL_IDS,  sub, pattern = "\\.\\d+$", replacement = ""))
+
+```
+
+
+
+```{r}
+#res$Symbol <- convertIDs(ENSEMBL_IDS, "SYMBOL","SYMBOL", org.Hs.eg.db)
+res$Alias <- convertIDs(SYMBOL_IDS, "SYMBOL", "ALIAS", org.Hs.eg.db)
+res$ENTREZID <- convertIDs(SYMBOL_IDS, "SYMBOL", "ENTREZID", org.Hs.eg.db)
+res$GO  <- convertIDs(SYMBOL_IDS, "SYMBOL", "GO", org.Hs.eg.db)
+res$Path  <- convertIDs(SYMBOL_IDS, "SYMBOL", "PATH", org.Hs.eg.db)
+res$Evidance  <- convertIDs(SYMBOL_IDS, "SYMBOL", "EVIDENCE", org.Hs.eg.db)
+res$PMID  <- convertIDs(SYMBOL_IDS, "SYMBOL", "PMID", org.Hs.eg.db)
+res$UNIPROT  <- convertIDs(SYMBOL_IDS, "SYMBOL", "UNIPROT", org.Hs.eg.db)
+res$ENSEMBL  <- convertIDs(SYMBOL_IDS, "SYMBOL", "ENSEMBL", org.Hs.eg.db)
+res$Symbol <- rownames(res)
+
+
+
+head(res)
+```
+
+
+# Volconoplot
+
+```{r}
+File_name_wte <- "VP"
+FC = log2(1.5)
+FC
+
+#print(summary(res))
+write.csv(file="R_log.csv", x=res)
+print(2^(FC))
+png(paste(subDir_img, "/", File_name_wte,2^(FC),"_FC_Volcanoplot_wtleg.png", sep = ""),width = 10, height = 10, units = 'in', res = 600, type="cairo")
+#tiff(paste(File_name_wte,2^(FC),"_FC_Volcanoplot_wtleg.tiff"),width = 10, height = 10, units = 'in', res = 600)
+#svg(paste(File_name_wte,2^(FC),"_FC_Volcanoplot_wtleg.svg"))
+
+par(mar=c(5,5,5,5), cex=1.0, cex.main=1.4, cex.axis=1.4, cex.lab=1.4)
+with(res, plot(log2FoldChange, -log10(padj), pch=21,col="black", bg="gray30" , main=paste("VP",File_name_wte)))
+with(subset(res, padj<.05 & (log2FoldChange) >  FC), points(log2FoldChange, -log10(padj), pch=21, cex=1.2, col="darkred", bg="red"))
+with(subset(res, padj<.05 & (log2FoldChange) < -1*FC), points(log2FoldChange, -log10(padj), pch=21, cex=1.2, col="darkgreen", bg="green"))
+#with(subset(res, P>.05 & abs(log2FoldChange) > FC), points(log2FoldChange, -log10(P), pch=1, col="royalblue1", bg="black"))
+#with(subset(res, P<.05 & abs(log2FoldChange) < FC), points(log2FoldChange, -log10(P), pch=1, col="royalblue1", bg="mediumslateblue"))
+
+
+abline(v=0, col="black", lty=3, lwd=1.0)
+abline(v=-1*FC, col="blue", lty=3, lwd=2.0)
+abline(v=1*FC, col="blue", lty=3, lwd=2.0)
+abline(h=-log10(max(res$padj[res$padj<0.05], na.rm=TRUE)), col="blueviolet", lty=3, lwd=2.0)
+prg = subset(res, (padj) <.05 & (log2FoldChange) >  FC)
+nrg = subset(res, (padj) <.05 & (log2FoldChange) <  -1*FC)
+print(nrow(prg))
+print(nrow(nrg))
+print(nrow(prg) + nrow(nrg))
+dev.off()
+
+img <- readPNG(paste(subDir_img, "/", File_name_wte,2^(FC),"_FC_Volcanoplot_wtleg.png", sep = ""))
+grid::grid.raster(img)
+```
+
+
+
+
+# Summary
+
+```{r}
+summary(res)
+```
+
+```{r}
+res05 <- results(dds, lfcThreshold = log2(1.5), alpha = 0.05)
+DESeq2::summary(res05)
+res05
+```
+
+
+# MA-plot
+
+```{r}
+#plotMA(res, ylim=c(-2,2))
+#plotMA(resLFC, ylim=c(-2,2))
+plotMA(res05, ylim=c(-2,2))
+```
+
+
+```{r}
+#https://mikelove.github.io/counts-model/model.html#hypothesis-weighting
+
+# library(ggplot2)
+# library(ggrepel)
+# 
+# 
+# res$SYMBOL <- mcols(dds)$SYMBOL
+# tab <- res %>% as.data.frame %>%
+#   filter(between(baseMean, 4, 1e5), between(abs(log2FoldChange), 0.58, 10))
+# 
+# #tab = as.data.frame(res)
+# #tab <- tab[complete.cases(tab),]
+# 
+# 
+# dat <- as.data.frame(res)
+# dat <- dat[complete.cases(dat),]
+# dat <- dat %>% mutate(sig = ifelse(padj < .1, "Y", "N"))
+# tab$sig <- "Y"
+# 
+# ggplot(dat, aes(baseMean, log2FoldChange, col=sig, label=Symbol)) + 
+#         geom_point() + scale_x_log10() + 
+#         xlab("mean of normalized counts") + 
+#         ylab("log fold change") + 
+#         geom_hline(yintercept=0, col="grey40") + 
+#         scale_color_manual(values=c("grey60", "blue")) +
+#         geom_point(data=tab, shape=1, size=5, show.legend=FALSE) + 
+#         geom_label_repel(data=tab,
+#                          nudge_x = 1,
+#                          nudge_y = 2*sign(tab$log2FoldChange),
+#                          show.legend=FALSE)
+```
+
+
+
+```{r fig.height=10, fig.width=10}
+# Add rectangle around labesl
+GGMAPPLOT = ggpubr::ggmaplot(res, main = expression("Group 1" %->% "Group 2"),
+   fdr = 0.05, fc = 1.5, size = 0.8,
+   palette = c("red", "green", "black"),
+   genenames = as.vector(res$Symbol),
+   legend = "top", top = 20,
+   font.label = c("bold", 11), label.rectangle = TRUE,
+   font.legend = "bold",
+   font.main = "bold",
+   ggtheme = ggplot2::theme_classic())
+
+GGMAPPLOT
+```
+
+```{r}
+save_pheatmap_png(GGMAPPLOT, paste(subDir_img,"1_MAPlot.png", sep="/"))
+save_pheatmap_svg(GGMAPPLOT, paste(subDir_img,"1_MAPlot.svg", sep="/"))
+
+```
+
+# Plot count
+
+```{r}
+topGene <- rownames(res)[which.min(res$padj)]
+Plotcount = plotCounts(dds, gene=which.min(res$padj), intgroup="hpv_status")
+Plotcount
+```
+
+```{r}
+colData(dds)
+```
+
+
+
+```{r}
+data <- plotCounts(dds, gene=topGene, intgroup="hpv_status", returnData=TRUE)
+ggplot2::ggplot(data, ggplot2::aes(x=hpv_status, y=count, color=hpv_status)) +
+  ggplot2::scale_y_log10() + 
+  ggplot2::geom_point(position=ggplot2::position_jitter(width=.1,height=0), size=3)
+```
+
+
+```{r}
+ggplot2::ggplot(data, ggplot2::aes(x=hpv_status, y=count, fill=hpv_status)) +
+  ggplot2::scale_y_log10() + 
+  ggplot2::geom_dotplot(binaxis="y", stackdir="center") 
+```
+
+```{r}
+data <- plotCounts(dds, gene=topGene, intgroup=c("hpv_status"), returnData=TRUE)
+COUNT_PLOT = ggplot2::ggplot(data, ggplot2::aes(x=hpv_status, y=count, fill=hpv_status)) +
+  ggplot2::scale_y_log10() + 
+  ggplot2::geom_dotplot(binaxis="y", stackdir="center")
+COUNT_PLOT
+```
+
+```{r}
+#COUNT_PLOT
+save_pheatmap_png(COUNT_PLOT, paste(subDir_img,"1_COUNTPlot.png", sep="/"))
+save_pheatmap_svg(COUNT_PLOT, paste(subDir_img,"1_COUNTPlot.svg", sep="/"))
+```
+
+
+
+```{r}
+data <- plotCounts(dds, gene=topGene, intgroup=c("hpv_status"), returnData=TRUE)
+ggplot2::ggplot(data, ggplot2::aes(x=hpv_status, y=count, fill=hpv_status)) +
+  ggplot2::scale_y_log10() + 
+  ggplot2::geom_dotplot(binaxis="y", stackdir="center")
+```
+
+
+```{r}
+mcols(res)$description
+```
+
+
+# Export data
+
+```{r}
+resOrdered <- res[order(res$pvalue),]
+write.csv(as.data.frame(resOrdered), 
+          file=paste(subDir_data,"hpv_status_HPV_vs_Neg.csv", sep = "/"))
+```
+
+
+# Multi-factor designs
+
+```{r}
+ddsMF <- dds
+levels(ddsMF$hpv_status)
+
+```
+
+
+```{r}
+resMF <- results(ddsMF)
+head(resMF)
+```
+
+
+
+```{r}
+resMFType <- results(ddsMF,
+                     contrast=c("hpv_status", "HPV", "Neg"))
+head(resMFType)
+```
+
+# Data transformations and visualization
+```{r}
+vsd <- vst(dds, blind=FALSE)
+rld <- rlog(dds, blind=FALSE)
+# this gives log2(n + 1)
+ntd <- normTransform(dds)
+head(assay(vsd), 3)
+```
+
+
+# Heatmap of the count matrix
+
+```{r}
+library("pheatmap")
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+df <- as.data.frame(colData(dds)[,c("hpv_status")])
+HeatMap = pheatmap(assay(ntd)[select,], cluster_rows=FALSE, show_rownames=FALSE,
+         cluster_cols=FALSE, annotation_col=df)
+
+HeatMap
+```
+## Save Heatmap
+
+```{r}
+save_pheatmap_png(HeatMap, paste(subDir_img,"1_heatmap.png", sep="/"))
+save_pheatmap_svg(HeatMap, paste(subDir_img,"1_heatmap.svg", sep="/"))
+```
+
+
+```{r}
+library("pheatmap")
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+df <- as.data.frame(colData(dds)["hpv_status"])
+HeatMap = pheatmap(assay(ntd)[select,], cluster_rows=FALSE, show_rownames=FALSE,
+         cluster_cols=T, annotation_col=df)
+#htmlRep[["pic"]] <- pheatmap(assay(ntd)[select,], cluster_rows=FALSE, show_rownames=FALSE,
+#         cluster_cols=T, annotation_col=df)
+
+HeatMap
+```
+
+
+
+```{r}
+save_pheatmap_png(HeatMap, paste(subDir_img,"2_heatmap.png", sep="/"))
+save_pheatmap_svg(HeatMap, paste(subDir_img,"2_heatmap.svg", sep="/"))
+```
+
+
+# Heatmap of the sample-to-sample distances
+```{r}
+sampleDists <- dist(t(assay(vsd)))
+#sampleDists
+```
+
+```{r fig.height=5, fig.width=5}
+library("RColorBrewer")
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$Tumor, vsd$Condition, sep="-")
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+```
+
+
+# Principal component plot of the samples
+```{r}
+PCA_1 = plotPCA(vsd, intgroup=c("hpv_status"))
+#PCA_2 = plotPCA(vsd, intgroup=c("Tumor", "Condition"))
+PCA_1
+#PCA_2
+```
+
+```{r}
+save_pheatmap_png(PCA_1, paste(subDir_img,"3_PCA.png", sep="/"))
+save_pheatmap_svg(PCA_1, paste(subDir_img,"3_PCA.svg", sep="/"))
+
+
+```
+
+
+```{r}
+library("ggplot2")
+pcaData <- plotPCA(vsd, intgroup=c("hpv_status"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+PCA_2 = ggplot(pcaData, aes(PC1, PC2, color=hpv_status, shape=hpv_status)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+PCA_2
+
+
+```
+
+
+
+```{r}
+save_pheatmap_png(PCA_2, paste(subDir_img,"4_PCA.png", sep="/"))
+save_pheatmap_svg(PCA_2, paste(subDir_img,"4_PCA.svg", sep="/"))
+```
+
+
+# Boxplot
+
+```{r}
+Data = log10(assays(dds)[["cooks"]])
+head(Data)
+```
+
+```{r}
+par(mar=c(8,5,2,2))
+bp = boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+bp
+```
+
+```{r}
+library(fgsea)
+```
+
+
+
+```{r}
+library(tidyverse)
+
+deg = as.tibble(res)
+
+res2 <- deg %>% 
+  dplyr::select(ENTREZID, stat) %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  group_by(ENTREZID) %>% 
+  summarize(stat=mean(stat))
+head(res2)
+```
+
+
+```{r}
+ranks <- deframe(res2)
+head(ranks, 20)
+```
+
+# Mouse reactome
+
+```{r}
+#pathways <- reactomePathways(names(exampleRanks))
+#fgseaRes <- fgsea(pathways, exampleRanks, maxSize=500, minSize = 15)
+#head(fgseaRes)
+```
+
+```{r}
+#rnk.file <- system.file("extdata", "naive.vs.th1.rnk", package="fgsea")
+gmt.file <- system.file("extdata", "mouse.reactome.gmt", package="fgsea")
+```
+
+```{r}
+#ranks <- read.table(rnk.file,
+#                    header=TRUE, colClasses = c("character", "numeric"))
+#ranks <- setNames(ranks$t, ranks$ID)
+#str(ranks)
+```
+
+```{r}
+pathways <- gmtPathways(gmt.file)
+str(head(pathways))
+
+```
+
+
+```{r}
+fgseaRes <- fgsea(pathways, ranks, minSize=15, maxSize=500)
+head(fgseaRes)
+```
+
+```{r}
+fgseaResTidy <- fgseaRes %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+# Show in a nice table:
+fgseaResTidy %>% 
+  #dplyr::select(-leadingEdge, -ES, -nMoreExtreme) %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj) %>% 
+  DT::datatable()
+```
+
+```{r fig.height=90, fig.width=30}
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Pathways from GSEA") + 
+  theme_minimal()
+
+
+```
+
+
+# Export data
+
+```{r}
+# write.table(fgseaResTidy, file=paste(subDir_data,"fgseaResTidy_Tumor_CGRP_vs_NES.csv", sep = "/"))
+
+openxlsx::write.xlsx(fgseaResTidy, paste(subDir_data,"fgseaResTidy_Tumor_CGRP_vs_NES.xlsx", sep = "/", overwrite=TRUE))
+```
+
+```{r}
+plotEnrichment(pathways[["5991035_Transcriptional_Regulation_by_TP53"]], ranks)
+```
+
+# GSEA table plot
+
+```{r fig.height=20, fig.width=10}
+topPathways <- fgseaRes %>% 
+    top_n(10, wt=-padj) %>% 
+    arrange(-NES) %>% 
+    pull(pathway)
+
+plotGseaTable(pathways[topPathways], 
+              ranks, 
+              fgseaRes,
+              gseaParam = 0.5)
+```
+
+***
+
+
+# Ontology gene sets
+
+```{r fig.height=20, fig.width=20}
+library(msigdbr)
+msigdbr_species()
+msigdbr_collections()
+
+#cgp_gene_sets = msigdbr(species = "Mus musculus", category = "C2", subcategory = "CP:REACTOME")
+oncogenic_gene_sets = msigdbr(species = "Mus musculus", category = "C6")
+head(oncogenic_gene_sets)
+
+deg = as.tibble(res)
+
+res_gs <- deg %>% 
+  dplyr::select(Symbol, stat) %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  group_by(Symbol) %>% 
+  summarize(stat=mean(stat))
+head(res_gs)
+
+ranks_ocn <- deframe(res_gs)
+head(ranks_ocn, 20)
+
+msigdbr_list = split(x = oncogenic_gene_sets$gene_symbol, f = oncogenic_gene_sets$gs_name)
+fgseaRes_ocg <- fgsea(msigdbr_list, ranks_ocn, minSize=15, maxSize=500)
+head(fgseaRes_ocg)
+
+
+fgseaRes_ocgTidy <- fgseaRes_ocg %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+# Show in a nice table:
+fgseaRes_ocgTidy %>% 
+  #dplyr::select(-leadingEdge, -ES, -nMoreExtreme) %>% 
+  dplyr::filter(padj <= 0.05) %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj) %>% 
+  DT::datatable()
+
+ggplot(fgseaRes_ocgTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Pathways from GSEA") + 
+  theme_minimal()
+
+openxlsx::write.xlsx(fgseaRes_ocgTidy, paste(subDir_data,"fgseaRes_Onco_Tumor_CGRP_vs_NES.xlsx", sep = "/", overwrite=TRUE))
+```
+
+***
+
+# GSEA table plot
+
+```{r}
+topPathways <- fgseaRes %>% 
+    top_n(10, wt=-padj) %>% 
+    arrange(-NES) %>% 
+    pull(pathway)
+
+plotGseaTable(pathways[topPathways], 
+              ranks, 
+              fgseaRes,
+              gseaParam = 0.5)
+```
+
+***
+
+
+# Regulatory target gene sets gene sets
+
+```{r fig.height=20, fig.width=20}
+library(msigdbr)
+msigdbr_species()
+msigdbr_collections()
+
+#cgp_gene_sets = msigdbr(species = "Mus musculus", category = "C2", subcategory = "CP:REACTOME")
+oncogenic_gene_sets = msigdbr(species = "Mus musculus", category = "C3")
+head(oncogenic_gene_sets)
+
+deg = as.tibble(res)
+
+res_gs <- deg %>% 
+  dplyr::select(Symbol, stat) %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  group_by(Symbol) %>% 
+  summarize(stat=mean(stat))
+head(res_gs)
+
+ranks_ocn <- deframe(res_gs)
+head(ranks_ocn, 20)
+
+msigdbr_list = split(x = oncogenic_gene_sets$gene_symbol, f = oncogenic_gene_sets$gs_name)
+fgseaRes_ocg <- fgsea(msigdbr_list, ranks_ocn, minSize=15, maxSize=500)
+head(fgseaRes_ocg)
+
+
+fgseaRes_ocgTidy <- fgseaRes_ocg %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+# Show in a nice table:
+fgseaRes_ocgTidy %>% 
+  #dplyr::select(-leadingEdge, -ES, -nMoreExtreme) %>% 
+  dplyr::filter(padj <= 0.05) %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj) %>% 
+  DT::datatable()
+
+ggplot(fgseaRes_ocgTidy, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill=padj<0.05)) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score",
+       title="Pathways from GSEA") + 
+  theme_minimal()
+
+openxlsx::write.xlsx(fgseaRes_ocgTidy, paste(subDir_data,"fgseaRes_Regulation_Tumor_CGRP_vs_NES.xlsx", sep = "/", overwrite=TRUE))
+```
+
+***
+
+# GO enrichment analysis
+
+## goseq
+
+```{r}
+library(goseq)
+supportedOrganisms() %>% filter(str_detect(Genome, "mm"))
+```
+
+[](https://bioinformatics-core-shared-training.github.io/RNAseq_September_2019/html/06_Gene_set_testing.html)
+
+```{r}
+deg = as.tibble(res)
+
+resGO <- deg %>% 
+  dplyr::select(ENSEMBL, stat) %>% 
+  na.omit() %>% 
+  distinct() %>% 
+  group_by(ENSEMBL) %>% 
+  summarize(stat=mean(stat))
+head(resGO)
+```
+
+
+```{r}
+sigData <- as.integer( res$padj < 0.01 & !is.na(res$padj) )
+names(sigData) <- res$ENSEMBL
+```
+
+
+```{r}
+pwf <- nullp(sigData, "mm10", "ensGene", bias.data = res$baseMean)
+
+```
+
+# Conduct GO enrichment analysis
+
+```{r}
+pwf_ENSEMBL_IDS <- row.names(pwf)
+pwf_ENSEMBL_IDS = unlist(lapply(pwf_ENSEMBL_IDS,  sub, pattern = "\\.\\d+$", replacement = ""))
+rownames(pwf) <- pwf_ENSEMBL_IDS
+goResults <- goseq(pwf, "mm10","ensGene", test.cats=c("GO:BP"))
+
+#DT::datatable(goResults)
+```
+
+```{r}
+openxlsx::write.xlsx(goResults, paste(subDir_data,"goResults_Tumor_CGRP_vs_NES.xlsx", sep = "/", overwrite=TRUE))
+
+DT::datatable(goResults)
+```
+
+
+Plot the top 10
+
+```{r}
+goResults %>% 
+    top_n(20, wt=-over_represented_pvalue) %>% 
+    mutate(hitsPerc=numDEInCat*100/numInCat) %>% 
+    ggplot(aes(x=hitsPerc, 
+               y=term, 
+               colour=over_represented_pvalue, 
+               size=numDEInCat)) +
+        geom_point() +
+        expand_limits(x=0) +
+        labs(x="Hits (%)", y="GO term", colour="p value", size="Count")
+```
+
+```{r}
+library(GO.db)
+GOTERM[[goResults$category[1]]]
+```
+
+# KEGG pathway enrichment analysis
+## clusterProfiler
+
+
+```{r}
+library(clusterProfiler)
+search_kegg_organism('mmu', by='kegg_code')
+```
+
+```{r}
+sigGenes <- deg %>% 
+    filter(pvalue < 0.05 & !is.na(pvalue) & 
+               abs(log2FoldChange) > log2(1.5) & 
+               !is.na(ENTREZID)) %>% 
+    pull(ENTREZID)
+
+kk <- enrichKEGG(gene = sigGenes, organism = 'mmu')
+head(kk, n=10)
+openxlsx::write.xlsx(kk, paste(subDir_data,"Kegg_Tumor_CGRP_vs_NES.xlsx", sep = "/", overwrite=TRUE))
+
+DT::datatable(as.data.frame(kk))
+```
+
+```{r}
+browseKEGG(kk, 'mmu04261')
+```
+
+```{r}
+library(pathview)
+log2FC <- res$log2FoldChange
+names(log2FC) <- res$ENTREZID
+
+pv.out = pathview(gene.data = log2FC, 
+         pathway.id = "mmu04261", 
+         species = "mmu", 
+         kegg.dir=paste(subDir_img, "/", sep = ""),
+         keys.align = "y",
+         kegg.native = T, match.data = F, multi.state = T, same.layer = T)
+         #limit = list(gene=5, cpd=1))
+
+#str(pv.out)
+```
+
+```{r}
+ head(pv.out$plot.data.gene)
+```
+
+```{r}
+list.files(pattern="mmu04261", full.names=T)[1]
+```
+
+```{r}
+library(png)
+img <- readPNG(list.files(pattern="mmu04261", full.names=T)[1])
+grid::grid.raster(img)
+```
+
+```{r}
+img <- readPNG(list.files(pattern="mmu04261", full.names=T)[2])
+grid::grid.raster(img)
+```
+
