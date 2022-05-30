@@ -1,22 +1,51 @@
 name: VTTSHI
 channels:
+  - conda-forge
   - defaults
 dependencies:
   - _libgcc_mutex=0.1
   - _openmp_mutex=5.1
   - bzip2=1.0.8
-  - ca-certificates=2022.4.26
+  - c-ares=1.18.1
+  - ca-certificates=2022.5.18.1
+  - cairo=1.16.0
   - certifi=2022.5.18.1
+  - curl=7.82.0
+  - fontconfig=2.13.1
+  - freetype=2.10.4
+  - glib=2.69.1
+  - icu=68.2
+  - jpeg=9e
+  - keyutils=1.6.1
+  - krb5=1.19.3
   - ld_impl_linux-64=2.38
+  - libcurl=7.82.0
+  - libedit=3.1.20191231
+  - libev=4.33
   - libffi=3.3
   - libgcc-ng=11.2.0
   - libgomp=11.2.0
+  - libiconv=1.16
+  - libnghttp2=1.46.0
+  - libpng=1.6.37
+  - libssh2=1.10.0
   - libstdcxx-ng=11.2.0
+  - libtiff=4.2.0
   - libuuid=1.0.3
+  - libwebp-base=1.2.2
+  - libxcb=1.15
+  - libxml2=2.9.10
+  - lz4-c=1.9.3
   - ncurses=6.3
+  - openjpeg=2.3.1
   - openssl=1.1.1o
+  - pcre=8.45
   - pip=21.2.4
+  - pixman=0.40.0
+  - poppler=0.89.0
+  - poppler-data=0.4.11
   - python=3.10.4
+  - python_abi=3.10
   - readline=8.1.2
   - setuptools=61.2.0
   - sqlite=3.38.3
@@ -25,6 +54,7 @@ dependencies:
   - wheel=0.37.1
   - xz=5.2.5
   - zlib=1.2.12
+  - zstd=1.4.9
   - pip:
     - anyio==3.6.1
     - appdirs==1.4.4
