@@ -20,6 +20,6 @@ git clone https://github.com/nilesh-iiita/VTTSHI
 To run this project you need to fullfill specific packages. Please run the following command in your terminal:
 ```bash
 module load Anaconda3/2020.07
-conda env create --file DeepBioComp.yml
+conda env create --file VTTSHI.yml
 ```
 _**NOTE:**_ This instructions only works if you are using [Cheaha Supercomputer](https://www.uab.edu/it/home/research-computing/cheaha).
