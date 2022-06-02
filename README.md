@@ -10,7 +10,7 @@ For complete details on the use and execution of this protocol, please refer to 
 [Integrative Network Biology Framework Elucidates Molecular Mechanisms of SARS-CoV-2 Pathogenesis] Kumar N, Mishra B, Mehmood A. Integrative network biology framework elucidates molecular mechanisms of SARS-CoV-2 pathogenesis. iScience 23 (9): 101526.
 
 
-### Cloning DeepBioComp
+### Cloning VTTSHI
 To clone this project please enter below command in you terminal:
 ```bash
 git clone https://github.com/nilesh-iiita/VTTSHI
