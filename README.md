@@ -26,4 +26,4 @@ conda env create --file VTTSHI.yml
 ```
 _**NOTE:**_ This instructions only works if you are using [Cheaha Supercomputer](https://www.uab.edu/it/home/research-computing/cheaha).
 
-[A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions]([A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions](https://www.sciencedirect.com/science/article/pii/S2666166722004889?via%3Dihub))
+![A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions]([A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions](https://www.sciencedirect.com/science/article/pii/S2666166722004889?via%3Dihub)
