@@ -1,4 +1,4 @@
-# A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions
+# ![https://www.sciencedirect.com/science/article/pii/S2666166722004889?via%3Dihub](A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions)
 
 Kumar N, Mishra B, Mukhtar MS. A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions. STAR protocols. 2022 Sep 16;3(3):101608.
 
