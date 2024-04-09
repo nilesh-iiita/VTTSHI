@@ -1,4 +1,4 @@
-# ![https://www.sciencedirect.com/science/article/pii/S2666166722004889?via%3Dihub](A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions)
+# A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions
 
 Kumar N, Mishra B, Mukhtar MS. A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions. STAR protocols. 2022 Sep 16;3(3):101608.
 
@@ -25,3 +25,5 @@ module load Anaconda3/2020.07
 conda env create --file VTTSHI.yml
 ```
 _**NOTE:**_ This instructions only works if you are using [Cheaha Supercomputer](https://www.uab.edu/it/home/research-computing/cheaha).
+
+![https://www.sciencedirect.com/science/article/pii/S2666166722004889?via%3Dihub](A pipeline of integrating transcriptome and interactome to elucidate central nodes in host-pathogens interactions)
